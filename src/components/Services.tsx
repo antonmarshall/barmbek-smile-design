@@ -1,10 +1,10 @@
 
-import { Tooth, Clock, Users, Image } from 'lucide-react';
+import { CircleDot, Image, Users, Clock } from 'lucide-react';
 
 const Services = () => {
   const services = [
     {
-      icon: <Tooth size={32} className="text-dental-blue" />,
+      icon: <CircleDot size={32} className="text-dental-blue" />,
       title: 'Prophylaxe & Vorsorge',
       description: 'Regelmäßige Kontrollen und professionelle Zahnreinigung für ein gesundes Lächeln und zur Vorbeugung von Zahnerkrankungen.'
     },
