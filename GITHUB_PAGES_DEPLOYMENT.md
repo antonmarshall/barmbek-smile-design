@@ -1,6 +1,97 @@
 # GitHub Pages Deployment Troubleshooting Guide
 
 ## 1. Initial Setup and Dependencies
+
+### 1.1. Prerequisites Check Script
+Create a file called `setup-checks.js` in your project root:
+
+```javascript
+const { execSync } = require('child_process');
+const fs = require('fs');
+
+function checkCommand(command, name) {
+    try {
+        execSync(command + ' --version', { stdio: 'pipe' });
+        console.log(`✅ ${name} is installed`);
+        return true;
+    } catch (e) {
+        console.error(`❌ ${name} is not installed`);
+        return false;
+    }
+}
+
+function checkFile(path, name) {
+    if (fs.existsSync(path)) {
+        console.log(`✅ ${name} exists`);
+        return true;
+    }
+    console.error(`❌ ${name} is missing`);
+    return false;
+}
+
+function checkPackageJson() {
+    if (!checkFile('package.json', 'package.json')) return false;
+    
+    const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+    const requiredScripts = ['build', 'deploy', 'predeploy'];
+    const missingScripts = requiredScripts.filter(script => !pkg.scripts[script]);
+    
+    if (missingScripts.length > 0) {
+        console.error(`❌ Missing scripts in package.json: ${missingScripts.join(', ')}`);
+        return false;
+    }
+    console.log('✅ All required scripts exist in package.json');
+    return true;
+}
+
+function checkGitSetup() {
+    try {
+        const remoteUrl = execSync('git remote get-url origin', { stdio: 'pipe' }).toString().trim();
+        console.log(`✅ Git remote URL: ${remoteUrl}`);
+        return true;
+    } catch (e) {
+        console.error('❌ Git remote is not configured');
+        return false;
+    }
+}
+
+function main() {
+    console.log('🔍 Running pre-deployment checks...\n');
+    
+    const checks = [
+        () => checkCommand('node', 'Node.js'),
+        () => checkCommand('npm', 'npm'),
+        () => checkCommand('git', 'Git'),
+        () => checkFile('vite.config.ts', 'Vite config'),
+        checkPackageJson,
+        checkGitSetup
+    ];
+    
+    const results = checks.map(check => check());
+    
+    console.log('\n📋 Summary:');
+    if (results.every(Boolean)) {
+        console.log('✅ All checks passed! You can proceed with deployment.');
+    } else {
+        console.log('❌ Some checks failed. Please fix the issues above before deploying.');
+    }
+}
+
+main();
+```
+
+Add this script to your `package.json`:
+
+```json
+{
+  "scripts": {
+    "check-setup": "node setup-checks.js",
+    "safe-deploy": "npm run check-setup && npm run go"
+  }
+}
+```
+
+### 1.2. Install Dependencies
 ```bash
 # Install required dependencies
 npm install --save-dev gh-pages
@@ -20,36 +111,51 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 
-export default defineConfig(({ mode }) => ({
-  // For User Site (username.github.io)
-  base: '/',
-  // For Project Site (username.github.io/repo-name)
-  base: '/repo-name/',
-  
-  // Other configurations...
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
+export default defineConfig(({ mode }) => {
+  // Get repository name from git remote URL
+  const getRepoName = () => {
+    try {
+      const remoteUrl = require('child_process')
+        .execSync('git remote get-url origin')
+        .toString()
+        .trim();
+      const match = remoteUrl.match(/([^/]+)\.git$/);
+      return match ? '/' + match[1] + '/' : '/';
+    } catch (e) {
+      console.warn('Failed to get repo name from git, using default base');
+      return '/';
+    }
+  };
+
+  return {
+    base: getRepoName(),
+    plugins: [react()],
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "./src"),
+      },
     },
-  },
-}));
+  };
+});
 ```
 
 ## 4. React Router Configuration (`src/App.tsx`)
 ```typescript
-// For User Site
-<BrowserRouter>
-  <Routes>
-    <Route path="/" element={<Home />} />
-  </Routes>
-</BrowserRouter>
+import { BrowserRouter } from 'react-router-dom';
 
-// For Project Site
-<BrowserRouter basename="/repo-name">
-  <Routes>
-    <Route path="/" element={<Home />} />
-  </Routes>
-</BrowserRouter>
+// Automatically get base name from vite config
+const basename = import.meta.env.BASE_URL;
+
+function App() {
+  return (
+    <BrowserRouter basename={basename}>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="*" element={<NotFound />} />
+      </Routes>
+    </BrowserRouter>
+  );
+}
 ```
 
 ## 5. Asset Paths Check
@@ -62,15 +168,17 @@ import logo from './assets/logo.png'
 import logo from '/assets/logo.png'
 ```
 
-## 6. Deployment Configuration (`package.json`)
+## 6. Enhanced Deployment Configuration (`package.json`)
 ```json
 {
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "check-setup": "node setup-checks.js",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist",
+    "safe-deploy": "npm run check-setup && npm run go",
     "go": "git add . && git commit -m \"Update\" && git push && npm run build && npm run deploy"
   }
 }
@@ -213,3 +321,72 @@ npm run deploy
 4. Monitor GitHub Actions logs
 5. Keep dependencies updated
 6. Run `npx update-browserslist-db@latest` periodically 
+
+## 15. New Automated Deployment Process
+
+1. First-time setup:
+```bash
+# Install dependencies and setup checks
+npm install
+npm install --save-dev gh-pages
+node setup-checks.js
+```
+
+2. Regular deployment:
+```bash
+# Safe deployment with checks
+npm run safe-deploy
+
+# Or individual steps if needed
+npm run check-setup
+npm run go
+```
+
+3. If any check fails:
+   - Review the error messages
+   - Fix any missing dependencies or configurations
+   - Run `npm run check-setup` again until all checks pass
+
+## 16. Common Setup Issues and Solutions
+
+### Issue 1: Node.js/npm Not Found
+**Solution**:
+1. Download and install Node.js from https://nodejs.org
+2. Verify installation: `node --version && npm --version`
+
+### Issue 2: Git Not Configured
+**Solution**:
+1. Install Git from https://git-scm.com
+2. Configure Git:
+   ```bash
+   git config --global user.name "Your Name"
+   git config --global user.email "your@email.com"
+   ```
+3. Setup repository:
+   ```bash
+   git init
+   git remote add origin your-repo-url
+   ```
+
+### Issue 3: Package.json Scripts Missing
+**Solution**:
+Run the setup check script and it will identify missing scripts:
+```bash
+npm run check-setup
+```
+
+The key improvements in this version include:
+1. Added automated setup verification script
+2. Enhanced Vite configuration with automatic repository name detection
+3. Added safe deployment command with pre-deployment checks
+4. Improved error handling and user feedback
+5. Automated base URL configuration
+6. Added comprehensive setup verification
+7. Enhanced troubleshooting steps
+8. Added safety checks before deployment
+
+To use this enhanced version:
+1. Create the `setup-checks.js` file
+2. Update your `package.json` with the new scripts
+3. Always use `npm run safe-deploy` for deployments
+4. Monitor the check results and fix any issues before deploying 
