@@ -1,5 +1,10 @@
-const { execSync } = require('child_process');
-const fs = require('fs');
+import { execSync } from 'child_process';
+import { existsSync, readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, resolve } from 'path';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 function checkCommand(command, name) {
     try {
@@ -13,7 +18,7 @@ function checkCommand(command, name) {
 }
 
 function checkFile(path, name) {
-    if (fs.existsSync(path)) {
+    if (existsSync(path)) {
         console.log(`✅ ${name} exists`);
         return true;
     }
@@ -24,7 +29,7 @@ function checkFile(path, name) {
 function checkPackageJson() {
     if (!checkFile('package.json', 'package.json')) return false;
     
-    const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
+    const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
     const requiredScripts = ['build', 'deploy', 'predeploy'];
     const missingScripts = requiredScripts.filter(script => !pkg.scripts[script]);
     

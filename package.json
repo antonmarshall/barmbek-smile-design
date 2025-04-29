@@ -11,6 +11,8 @@
     "preview": "vite preview",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist",
+    "check-setup": "node setup-checks.js",
+    "safe-deploy": "npm run check-setup && npm run go",
     "go": "git add . && git commit -m \"Update\" && git push && npm run build && npm run deploy"
   },
   "dependencies": {
